@@ -1,25 +1,83 @@
 import xgboost as xgb
-from sklearn.metrics import classification_report, confusion_matrix
+import mlflow
+import mlflow.xgboost
+from sklearn.metrics import (
+    classification_report,
+    confusion_matrix,
+    f1_score,
+    precision_recall_curve,
+    auc
+)
+import shap
+import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 
 
-def train_model(X_train, y_train):
+def train_model(X_train, y_train, X_test, y_test):
     """
-    Train XGBoost model
+    Train model with MLflow tracking
     """
-    model = xgb.XGBClassifier(
-        n_estimators=100,
-        max_depth=6,
-        learning_rate=0.1,
-        scale_pos_weight=10,  # handle imbalance
-        use_label_encoder=False,
-        eval_metric="logloss"
-    )
 
-    model.fit(X_train, y_train)
+    # Handle imbalance dynamically
+    scale_pos_weight = (len(y_train) - sum(y_train)) / sum(y_train)
+    mlflow.set_experiment("Fraud_Detection_v1")
 
-    return model
+    with mlflow.start_run():
 
+        model = xgb.XGBClassifier(
+            n_estimators=300,
+            max_depth=8,
+            learning_rate=0.05,
+            scale_pos_weight=scale_pos_weight,
+            eval_metric="logloss",
+            use_label_encoder=False
+        )
 
+        model.fit(X_train, y_train)
+
+        # Predictions
+        y_pred = model.predict(X_test)
+        y_prob = model.predict_proba(X_test)[:, 1]
+
+        # Metrics
+        f1 = f1_score(y_test, y_pred)
+
+        precision, recall, _ = precision_recall_curve(y_test, y_prob)
+        pr_auc = auc(recall, precision)
+
+        print("\n📊 Evaluation:")
+        print(classification_report(y_test, y_pred))
+        print(f"F1 Score: {f1}")
+        print(f"PR-AUC: {pr_auc}")
+
+        # Log metrics
+        mlflow.log_param("n_estimators", 200)
+        mlflow.log_param("max_depth", 6)
+        mlflow.log_metric("f1_score", f1)
+        mlflow.log_metric("pr_auc", pr_auc)
+
+        # Log model
+        mlflow.xgboost.log_model(model, "model")
+
+        # SHAP Explainability
+        explain_model(model, X_test)
+
+        return model
+
+def explain_model(model, X_sample):
+    """
+    Generate SHAP explanations
+    """
+    print("\n🔍 Generating SHAP explanations...")
+
+    explainer = shap.Explainer(model)
+    shap_values = explainer(X_sample[:100])  # sample for speed
+
+    plt.figure()
+    shap.summary_plot(shap_values, X_sample[:100], show=False)
+    plt.savefig("shap_summary.png")
+
+    mlflow.log_artifact("shap_summary.png")
 def evaluate_model(model, X_test, y_test):
     """
     Evaluate model
