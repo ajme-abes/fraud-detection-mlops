@@ -7,7 +7,7 @@ from src.models.train import train_model, evaluate_model
 def run_pipeline():
     print("🚀 Starting Training Pipeline...\n")
 
-    my_path = r'C:/Users/ajmel/Desktop/fraud-detection-mlops/data/raw/creditcard.csv'
+    my_path = r'data/raw/creditcard.csv'
 
 
     # 1. Load
