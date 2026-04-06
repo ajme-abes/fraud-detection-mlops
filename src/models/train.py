@@ -11,7 +11,10 @@ from sklearn.metrics import (
 import shap
 import matplotlib.pyplot as plt
 import matplotlib.pyplot as plt
+import joblib
+import os
 
+os.makedirs("models", exist_ok=True)
 
 def train_model(X_train, y_train, X_test, y_test):
     """
@@ -34,6 +37,9 @@ def train_model(X_train, y_train, X_test, y_test):
         )
 
         model.fit(X_train, y_train)
+
+        # Save the trained model
+        joblib.dump(model, "models/model.pkl")
 
         # Predictions
         y_pred = model.predict(X_test)

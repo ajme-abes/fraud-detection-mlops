@@ -18,4 +18,4 @@ COPY . .
 EXPOSE 5000
 
 # Default command (run pipeline)
-CMD ["python", "-m", "src.pipelines.training_pipeline"]
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
