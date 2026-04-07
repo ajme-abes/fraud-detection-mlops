@@ -21,7 +21,7 @@ MODEL_PATH = os.path.join(BASE_DIR, "models", "model.pkl")
 
 PREDICTIONS_FILE = os.path.join(LOG_DIR, "predictions.jsonl")
 FEEDBACK_FILE = os.path.join(LOG_DIR, "feedback.jsonl")
-TRAIN_DATA_FILE = os.path.join(DATA_DIR, "training_features.csv")
+TRAIN_DATA_FILE = os.path.join(BASE_DIR, "data", "training_features.csv")
 
 os.makedirs(LOG_DIR, exist_ok=True)
 
@@ -104,6 +104,21 @@ def predict(transaction: Transaction):
 
 @app.post("/feedback")
 def feedback(data: Feedback):
+
+    if not os.path.exists(PREDICTIONS_FILE):
+        raise HTTPException(status_code=400, detail="No predictions found")
+
+    # Load existing predictions
+    with open(PREDICTIONS_FILE) as f:
+        preds = {json.loads(line)["request_id"] for line in f}
+
+    # Validate request_id
+    if data.request_id not in preds:
+        raise HTTPException(
+            status_code=404,
+            detail="Invalid request_id. No matching prediction found."
+        )
+
     entry = {
         "request_id": data.request_id,
         "actual_label": data.actual_label,
@@ -113,7 +128,7 @@ def feedback(data: Feedback):
     with open(FEEDBACK_FILE, "a") as f:
         f.write(json.dumps(entry) + "\n")
 
-    return {"status": "stored"}
+    return {"status": "Success Feedback stored"}
 
 
 @app.post("/monitoring/run-drift")
