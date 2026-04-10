@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, field_validator
-
+from api.background import start_scheduler
 import os
 import json
 import uuid
@@ -12,13 +12,11 @@ from datetime import datetime
 from typing import List
 
 from monitoring.drift import run_drift_check 
-
+MODEL_VERSION = os.getenv("MODEL_VERSION", "v1")
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
 LOG_DIR = os.path.join(BASE_DIR, "logs")
 DATA_DIR = os.path.join(BASE_DIR, "data")
-MODEL_PATH = os.path.join(BASE_DIR, "models", "model.pkl")
-
+MODEL_PATH = os.path.join(BASE_DIR, "models", MODEL_VERSION, "model.pkl")
 PREDICTIONS_FILE = os.path.join(LOG_DIR, "predictions.jsonl")
 FEEDBACK_FILE = os.path.join(LOG_DIR, "feedback.jsonl")
 TRAIN_DATA_FILE = os.path.join(BASE_DIR, "data", "training_features.csv")
@@ -55,7 +53,7 @@ class Transaction(BaseModel):
             raise ValueError("Expected 31 features")
         return v
 
-
+THRESHOLD = 0.7
 class Feedback(BaseModel):
     request_id: str
     actual_label: int
@@ -81,15 +79,20 @@ def predict(transaction: Transaction):
     request_id = str(uuid.uuid4())
     data = np.array(transaction.features).reshape(1, -1)
 
-    pred = int(model.predict(data)[0])
     prob = float(model.predict_proba(data)[0][1])
+    pred = 1 if prob > THRESHOLD else 0
+
 
     log = {
         "request_id": request_id,
         "timestamp": datetime.utcnow().isoformat(),
         "features": transaction.features,
         "prediction": pred,
-        "probability": prob
+        "probability": round(prob, 4),
+        "threshold": THRESHOLD,
+        "model_version": MODEL_VERSION
+
+        
     }
 
     with open(PREDICTIONS_FILE, "a") as f:
@@ -169,3 +172,13 @@ def accuracy():
     acc = (correct / total * 100) if total > 0 else 0
 
     return {"accuracy": f"{acc:.2f}%", "samples": total}
+
+@app.get("/logs/raw")  
+def get_raw_logs():
+    if not os.path.exists(PREDICTIONS_FILE):
+        return []  
+    with open(PREDICTIONS_FILE, "r") as f:
+        return [json.loads(line) for line in f.readlines()]
+@app.on_event("startup")
+def startup_event():
+    start_scheduler()
