@@ -182,3 +182,13 @@ def get_raw_logs():
 @app.on_event("startup")
 def startup_event():
     start_scheduler()
+
+@app.post("/monitoring/retrain")
+def trigger_retraining():
+    # Import inside the function to keep things clean
+    from api.train_v2 import retrain_model
+    # Start as a background task so it doesn't block the API
+    success = retrain_model() 
+    if success:
+        return {"message": "New model version v2 created successfully!"}
+    return {"message": "Retraining skipped (not enough new data)."}

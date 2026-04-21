@@ -83,3 +83,10 @@ if st.button("Run Drift Check"):
     st.write(res)
 
 st.markdown(f"👉 [View Full Drift Report]({API_URL}/reports/drift_report.html)")
+
+if st.button("🚀 Trigger Retraining"):
+    res = requests.post(f"{API_URL}/monitoring/retrain")
+    if res.status_code == 200:
+        st.success(res.json().get("message"))
+    else:
+        st.error(f"Error: {res.text}")
