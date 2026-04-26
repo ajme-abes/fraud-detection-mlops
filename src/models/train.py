@@ -10,93 +10,107 @@ from sklearn.metrics import (
 )
 import shap
 import matplotlib.pyplot as plt
-import matplotlib.pyplot as plt
 import joblib
 import os
 
+from src.config.config_loader import get_config
+
 os.makedirs("models", exist_ok=True)
+
 
 def train_model(X_train, y_train, X_test, y_test):
     """
-    Train model with MLflow tracking
+    Train XGBoost model with MLflow tracking.
+    Hyperparameters and experiment name are read from config.yaml.
     """
+    cfg = get_config()
+    xgb_cfg = cfg["xgboost"]
+    mlflow_cfg = cfg["mlflow"]
+    paths_cfg = cfg["paths"]
 
-    # Handle imbalance dynamically
+    # Handle class imbalance dynamically
     scale_pos_weight = (len(y_train) - sum(y_train)) / sum(y_train)
-    mlflow.set_experiment("Fraud_Detection_v1")
 
-    with mlflow.start_run():
+    model = xgb.XGBClassifier(
+        n_estimators=xgb_cfg["n_estimators"],
+        max_depth=xgb_cfg["max_depth"],
+        learning_rate=xgb_cfg["learning_rate"],
+        eval_metric=xgb_cfg["eval_metric"],
+        scale_pos_weight=scale_pos_weight,
+    )
 
-        model = xgb.XGBClassifier(
-            n_estimators=300,
-            max_depth=8,
-            learning_rate=0.05,
-            scale_pos_weight=scale_pos_weight,
-            eval_metric="logloss",
-            use_label_encoder=False
-        )
+    model.fit(X_train, y_train)
 
-        model.fit(X_train, y_train)
+    # Save the trained model
+    model_path = os.path.join(paths_cfg["models_dir"], "v1", "model.pkl")
+    os.makedirs(os.path.dirname(model_path), exist_ok=True)
+    joblib.dump(model, model_path)
 
-        # Save the trained model
-        joblib.dump(model, "models/model.pkl")
+    # Predictions
+    y_pred = model.predict(X_test)
+    y_prob = model.predict_proba(X_test)[:, 1]
 
-        # Predictions
-        y_pred = model.predict(X_test)
-        y_prob = model.predict_proba(X_test)[:, 1]
+    # Metrics
+    f1 = f1_score(y_test, y_pred)
+    precision, recall, _ = precision_recall_curve(y_test, y_prob)
+    pr_auc = auc(recall, precision)
 
-        # Metrics
-        f1 = f1_score(y_test, y_pred)
+    print("\n📊 Evaluation:")
+    print(classification_report(y_test, y_pred))
+    print(f"F1 Score: {f1:.4f}")
+    print(f"PR-AUC:   {pr_auc:.4f}")
 
-        precision, recall, _ = precision_recall_curve(y_test, y_prob)
-        pr_auc = auc(recall, precision)
+    # Log to MLflow — optional, never blocks training
+    try:
+        mlflow.set_experiment(mlflow_cfg["experiment_v1"])
+        with mlflow.start_run():
+            mlflow.log_param("n_estimators", xgb_cfg["n_estimators"])
+            mlflow.log_param("max_depth", xgb_cfg["max_depth"])
+            mlflow.log_param("learning_rate", xgb_cfg["learning_rate"])
+            mlflow.log_param("scale_pos_weight", round(float(scale_pos_weight), 4))
+            mlflow.log_metric("f1_score", f1)
+            mlflow.log_metric("pr_auc", pr_auc)
+            mlflow.xgboost.log_model(model, name="model")
+            explain_model(model, X_test, paths_cfg["shap_plot"])
+            print("📈 MLflow run logged successfully.")
+    except Exception as e:
+        print(f"⚠️  MLflow logging skipped (non-fatal): {e}")
 
-        print("\n📊 Evaluation:")
-        print(classification_report(y_test, y_pred))
-        print(f"F1 Score: {f1}")
-        print(f"PR-AUC: {pr_auc}")
+    return model
 
-        # Log metrics
-        mlflow.log_param("n_estimators", 200)
-        mlflow.log_param("max_depth", 6)
-        mlflow.log_metric("f1_score", f1)
-        mlflow.log_metric("pr_auc", pr_auc)
 
-        # Log model
-        mlflow.xgboost.log_model(model, "model")
-
-        # SHAP Explainability
-        explain_model(model, X_test)
-
-        return model
-
-def explain_model(model, X_sample):
+def explain_model(model, X_sample, shap_plot_path: str = "shap_summary.png"):
     """
-    Generate SHAP explanations
+    Generate and save a SHAP summary plot, then log it as an MLflow artifact.
     """
+    cfg = get_config()
+    sample_size = cfg["monitoring"]["shap_sample_size"]
+
     print("\n🔍 Generating SHAP explanations...")
 
     explainer = shap.Explainer(model)
-    shap_values = explainer(X_sample[:100])  # sample for speed
+    shap_values = explainer(X_sample[:sample_size])
 
     plt.figure()
-    shap.summary_plot(shap_values, X_sample[:100], show=False)
-    plt.savefig("shap_summary.png")
+    shap.summary_plot(shap_values, X_sample[:sample_size], show=False)
+    plt.savefig(shap_plot_path)
+    plt.close()
 
-    mlflow.log_artifact("shap_summary.png")
+    mlflow.log_artifact(shap_plot_path)
+
+
 def evaluate_model(model, X_test, y_test):
     """
-    Evaluate model
+    Evaluate model using the production prediction threshold from config.
     """
-    # Get probabilities instead of just 0 or 1
+    cfg = get_config()
+    threshold = cfg["model"]["prediction_threshold"]
+
     y_probs = model.predict_proba(X_test)[:, 1]
-    
-    # AGGRESSIVE THRESHOLD: set to 0.1
-    threshold = 0.1
     y_pred = (y_probs >= threshold).astype(int)
 
-    print(f"\n🚨 Model Evaluation (Aggressive Threshold {threshold}):")
+    print(f"\n🚨 Model Evaluation (Threshold: {threshold}):")
     print(classification_report(y_test, y_pred))
-    
+
     print("\n🧩 Confusion Matrix:")
     print(confusion_matrix(y_test, y_pred))

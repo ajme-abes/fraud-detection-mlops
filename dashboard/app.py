@@ -85,8 +85,21 @@ if st.button("Run Drift Check"):
 st.markdown(f"👉 [View Full Drift Report]({API_URL}/reports/drift_report.html)")
 
 if st.button("🚀 Trigger Retraining"):
-    res = requests.post(f"{API_URL}/monitoring/retrain")
-    if res.status_code == 200:
-        st.success(res.json().get("message"))
-    else:
-        st.error(f"Error: {res.text}")
+    with st.spinner("Retraining in progress... this may take a minute."):
+        try:
+            res = requests.post(f"{API_URL}/monitoring/retrain", timeout=300)
+            if res.status_code == 200:
+                data = res.json()
+                msg = data.get("message", "")
+                if "skipped" in msg.lower():
+                    st.warning(f"⚠️ {msg}\n\nTip: Submit at least 5 feedback labels via POST /feedback before retraining.")
+                else:
+                    st.success(f"✅ {msg}")
+                    if "active_version" in data:
+                        st.info(f"Active model: **{data['active_version']}** (loaded at {data.get('loaded_at', 'N/A')})")
+            else:
+                st.error(f"API error {res.status_code}: {res.text}")
+        except requests.exceptions.Timeout:
+            st.error("Request timed out — retraining is still running in the background. Refresh in a minute.")
+        except Exception as e:
+            st.error(f"Connection error: {e}")

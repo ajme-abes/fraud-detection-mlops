@@ -1,0 +1,37 @@
+paths:
+  raw_data: "data/raw/creditcard.csv"
+  processed_dir: "data/processed"
+  training_features: "data/training_features.csv"
+  models_dir: "models"
+  logs_dir: "logs"
+  predictions_file: "logs/predictions.jsonl"
+  feedback_file: "logs/feedback.jsonl"
+  shap_plot: "shap_summary.png"
+  drift_report: "monitoring/drift_report.html"
+
+model:
+  default_version: "v1"
+  prediction_threshold: 0.7
+  min_feedback_samples: 5
+  label_column: "Class"
+
+xgboost:
+  n_estimators: 300
+  max_depth: 8
+  learning_rate: 0.05
+  eval_metric: "logloss"
+
+mlflow:
+  experiment_v1: "Fraud_Detection_v1"
+  experiment_v2: "Fraud_Detection_v2"
+
+preprocessing:
+  test_size: 0.2
+  random_state: 42
+  scale_columns:
+    - "Amount"
+    - "Time"
+
+monitoring:
+  drift_schedule_minutes: 5
+  shap_sample_size: 100
