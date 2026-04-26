@@ -2,7 +2,7 @@
 
 > End-to-end production ML system for real-time credit card fraud detection — built with a full MLOps lifecycle including experiment tracking, data drift monitoring, automated retraining, and live model hot-swapping.
 
-[![CI Pipeline](https://github.com/your-username/fraud-detection-mlops/actions/workflows/ci.yml/badge.svg)](https://github.com/your-username/fraud-detection-mlops/actions)
+[![CI Pipeline](https://github.com/ajme-abes/fraud-detection-mlops/actions/workflows/ci.yml/badge.svg)](https://github.com/ajme-abes/fraud-detection-mlops/actions)
 ![Python](https://img.shields.io/badge/python-3.11-blue)
 ![XGBoost](https://img.shields.io/badge/model-XGBoost-orange)
 ![FastAPI](https://img.shields.io/badge/api-FastAPI-009688)
